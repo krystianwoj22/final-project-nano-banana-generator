@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+
+    function isValidImageGeneration(data) {
+      return data.keys().hasAll(['id', 'prompt', 'fullPrompt', 'imageData', 'createdAt', 'userId']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.prompt is string && data.prompt.size() <= 2000 &&
+             data.fullPrompt is string && data.fullPrompt.size() <= 20000 &&
+             data.imageData is string && data.imageData.size() <= 2000000 &&
+             data.userId == request.auth.uid &&
+             (data.get('likesCount', 0) is int) &&
+             (data.get('aspectRatio', '1:1') in ['1:1', '16:9', '9:16', '4:3']) &&
+             (data.get('negativePrompt', '') is string && data.get('negativePrompt', '').size() <= 1000) &&
+             (data.get('style', 'None') is string && data.get('style', 'None').size() <= 100);
+    }
+
+    match /generated_images/{imageId} {
+      // Anyone signed in can view the gallery
+      allow read: if isSignedIn();
+      
+      allow create: if isSignedIn() &&
+                    isValidId(imageId) &&
+                    isValidImageGeneration(incoming()) &&
+                    incoming().id == imageId &&
+                    incoming().createdAt == request.time &&
+                    incoming().get('likesCount', 0) == 0;
+                    
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+      
+      // Allow only liking (incrementing likesCount)
+      allow update: if isSignedIn() &&
+                    isValidId(imageId) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['likesCount']) &&
+                    incoming().likesCount == existing().likesCount + 1;
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Nano Banana Image Generator",
+  "description": "An AI image generator using Gemini Nano Banana with a prompt enhancer and global community gallery.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
